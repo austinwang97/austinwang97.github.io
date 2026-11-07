@@ -1,1 +1,3 @@
-# this is austin's blog!
+# austinwang.net
+
+Personal site. Plain HTML, served by GitHub Pages.
