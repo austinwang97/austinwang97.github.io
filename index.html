@@ -222,7 +222,7 @@
       const recent = (r.recenttracks?.track || []).slice(0, 8);
       const top = t.topartists?.artist || [];
       if (!recent.length && !top.length) return;
-      document.getElementById('lfm-recent').innerHTML = recent.map(x => `<li><a href="${esc(x.url)}">${esc(x.name)}</a><span class="stars">${x['@attr']?.nowplaying ? 'playing now' : ''}</span><span class="meta">${esc(x.artist['#text'])}${x.date ? ' · ' + esc(x.date['#text'].replace(/ \d{4},/, ',')) : ''}</span></li>`).join('');
+      document.getElementById('lfm-recent').innerHTML = recent.map(x => `<li><a href="${esc(x.url)}">${esc(x.name)}</a><span class="stars">${x['@attr']?.nowplaying ? 'playing now' : ''}</span><span class="meta">${esc(x.artist['#text'])}${x.date ? ' · ' + new Date(x.date.uts * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''}</span></li>`).join('');
       document.getElementById('lfm-top').innerHTML = top.map(a => `<li><span class="t">${esc(a.name)}</span><span class="y">${esc(a.playcount)} plays</span></li>`).join('');
       document.querySelector('.lfm').hidden = false;
       lfmLoaded = Date.now();
