@@ -24,9 +24,14 @@
   .home{min-height:100vh;padding:18px 20px;display:flex;flex-direction:column;
         transition:transform .55s var(--ease),opacity .4s var(--ease)}
   .top{display:flex;justify-content:space-between}
-  .sentence{flex:1;display:flex;align-items:center;margin:0}
+  .sentence{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;margin:0}
   .sentence p{margin:0;max-width:17em;font:300 clamp(2rem,4.6vw,4.1rem)/1.12 "Newsreader",Georgia,serif;letter-spacing:-.018em}
   .sentence a{font-style:italic;font-weight:400}
+  .sentence p.np{margin:1.6em 0 0;font:400 15px/1.45 "Helvetica Neue",Helvetica,Arial,sans-serif;letter-spacing:0;color:var(--dim);max-width:none}
+  .np a{font:italic 500 1.12em "Newsreader",Georgia,serif}
+  .np .dot{display:inline-block;width:.5em;height:.5em;border-radius:50%;background:var(--link);margin-right:.55em;vertical-align:.08em;animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.25}}
+  @media (prefers-reduced-motion:reduce){.np .dot{animation:none}}
   .bottom{display:flex;flex-wrap:wrap;gap:.4em 1.6em}
   .bottom a{font:italic 500 1.15rem "Newsreader",Georgia,serif}
   body.open .home{transform:translateX(-14vw);opacity:.12;pointer-events:none}
@@ -76,6 +81,7 @@
 
   <div class="sentence">
     <p>I do <a href="#work">RevOps at ElevenLabs</a>, play weddings with <a href="#strings">Apollo Strings</a>, and spend the rest of my time on <a href="#films">films</a>, <a href="#books">books</a>, <a href="#music">music</a> and <a href="#writing">writing</a>.</p>
+    <p class="np" id="np" hidden></p>
   </div>
 
   <nav class="bottom" aria-label="Elsewhere">
@@ -229,6 +235,22 @@
     } catch (e) {}
   }
   addEventListener('hashchange', () => { if (location.hash === '#music') music(); });
+
+  // Under the sentence: what I'm playing right now, or the last thing I played.
+  const ago = sec => { const m = Math.round((Date.now() / 1000 - sec) / 60); if (m < 60) return `${m} min ago`; const h = Math.round(m / 60); if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`; const d = Math.round(h / 24); return `${d} day${d > 1 ? 's' : ''} ago`; };
+  async function nowPlaying() {
+    try {
+      const r = await fetch(LFM + '&method=user.getrecenttracks&limit=1').then(x => x.json());
+      const t = r.recenttracks?.track?.[0]; if (!t) return;
+      const el = document.getElementById('np');
+      const song = `<a href="${esc(t.url)}">${esc(t.name)}</a> by ${esc(t.artist['#text'])}`;
+      el.innerHTML = t['@attr']?.nowplaying ? `<span class="dot" aria-hidden="true"></span>Listening to ${song}` : `Last played ${song}, ${ago(+t.date.uts)}`;
+      el.hidden = false;
+    } catch (e) {}
+  }
+  nowPlaying();
+  setInterval(() => { if (!document.hidden) nowPlaying(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) nowPlaying(); });
   if (location.hash === '#music') music();
   function lazy() {
     if (location.hash === '#music') document.querySelectorAll('.sc[data-src]').forEach(d => { d.innerHTML = `<iframe title="Quiggle on SoundCloud" loading="lazy" allow="autoplay" src="${d.dataset.src}"></iframe>`; d.removeAttribute('data-src'); });
