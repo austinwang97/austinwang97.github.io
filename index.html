@@ -167,7 +167,7 @@
     <ul class="log" id="lfm-recent"></ul>
     <h3>Most played this month</h3>
     <ol id="lfm-top"></ol>
-    <p class="dim" style="margin-top:1.2em">From <a href="https://www.last.fm/user/austinwang97">Last.fm</a>, updated every few hours.</p>
+    <p class="dim" style="margin-top:1.2em">From <a href="https://www.last.fm/user/austinwang97">Last.fm</a>, live.</p>
   </div>
   <h3>Mixes</h3>
   <div class="sc" data-src="https://w.soundcloud.com/player/?url=https%3A//soundcloud.com/quiggle&amp;color=%231f3bff&amp;auto_play=false&amp;hide_related=true&amp;show_comments=false&amp;show_user=true&amp;show_reposts=true&amp;visual=false"></div>
@@ -209,12 +209,27 @@
       ul.innerHTML = items.slice(0, 8).map(i => `<li><a href="${esc(i.url)}">${esc(i.title)}</a><span class="stars" aria-label="${i.rating ?? 'no'} stars">${stars(i.rating)}</span><span class="meta">${ul.dataset.kind === 'film' ? esc(i.year) : esc(i.author)}${(i.watched || i.read) ? ' · ' + fmt(i.watched || i.read) : ''}</span></li>`).join('');
     } catch (e) { const box = ul.closest('[data-hide-empty]') || ul.previousElementSibling; if (box) box.hidden = true; ul.hidden = true; }
   });
-  fetch('data/music.json', { cache: 'no-cache' }).then(r => r.json()).then(m => {
-    if (!m.recent?.length && !m.top?.length) return;
-    document.getElementById('lfm-recent').innerHTML = (m.recent || []).map(t => `<li><a href="https://www.last.fm/music/${encodeURIComponent(t.artist)}/_/${encodeURIComponent(t.track)}">${esc(t.track)}</a><span class="stars">${t.now ? 'now playing' : ''}</span><span class="meta">${esc(t.artist)}</span></li>`).join('');
-    document.getElementById('lfm-top').innerHTML = (m.top || []).map(a => `<li><span class="t">${esc(a.artist)}</span><span class="y">${a.plays ? a.plays + ' plays' : ''}</span></li>`).join('');
-    document.querySelector('.lfm').hidden = false;
-  }).catch(() => {});
+  // Live from Last.fm (Spotify plays are logged there). Read-only public key.
+  const LFM = 'https://ws.audioscrobbler.com/2.0/?format=json&user=austinwang97&api_key=faf03fc7ab4c9619fe7e65a52dd723b8';
+  let lfmLoaded = 0;
+  async function music() {
+    if (Date.now() - lfmLoaded < 60000) return;
+    try {
+      const [r, t] = await Promise.all([
+        fetch(LFM + '&method=user.getrecenttracks&limit=8').then(x => x.json()),
+        fetch(LFM + '&method=user.gettopartists&period=1month&limit=8').then(x => x.json()),
+      ]);
+      const recent = (r.recenttracks?.track || []).slice(0, 8);
+      const top = t.topartists?.artist || [];
+      if (!recent.length && !top.length) return;
+      document.getElementById('lfm-recent').innerHTML = recent.map(x => `<li><a href="${esc(x.url)}">${esc(x.name)}</a><span class="stars">${x['@attr']?.nowplaying ? 'playing now' : ''}</span><span class="meta">${esc(x.artist['#text'])}${x.date ? ' · ' + esc(x.date['#text'].replace(/ \d{4},/, ',')) : ''}</span></li>`).join('');
+      document.getElementById('lfm-top').innerHTML = top.map(a => `<li><span class="t">${esc(a.name)}</span><span class="y">${esc(a.playcount)} plays</span></li>`).join('');
+      document.querySelector('.lfm').hidden = false;
+      lfmLoaded = Date.now();
+    } catch (e) {}
+  }
+  addEventListener('hashchange', () => { if (location.hash === '#music') music(); });
+  if (location.hash === '#music') music();
   function lazy() {
     if (location.hash === '#music') document.querySelectorAll('.sc[data-src]').forEach(d => { d.innerHTML = `<iframe title="Quiggle on SoundCloud" loading="lazy" allow="autoplay" src="${d.dataset.src}"></iframe>`; d.removeAttribute('data-src'); });
   }
