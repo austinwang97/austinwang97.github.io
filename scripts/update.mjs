@@ -42,28 +42,6 @@ async function books() {
     }));
 }
 
-// Every film rated 4.5 or 5, newest first, plus the four profile favourites.
-async function loved() {
-  const pool = [];
-  for (const r of ['5', '4.5']) {
-    const list = [];
-    for (let p = 1; p <= 15; p++) {
-      const html = await get(`https://letterboxd.com/itsameaustin/films/rated/${r}/by/date/page/${p}/`);
-      const got = [...html.matchAll(/data-item-name="([^"]+)"[\s\S]*?data-item-slug="([^"]+)"/g)];
-      if (!got.length) break;
-      got.forEach(m => list.push([decode(m[1]).replace(/&#039;/g, "'"), m[2]]));
-    }
-    list.forEach(([name, slug], i) => {
-      const m = name.match(/^(.*) \((\d{4})\)$/);
-      pool.push({ t: m ? m[1] : name, y: m ? m[2] : '', r: Number(r), s: slug, f: +(i / list.length).toFixed(3) });
-    });
-  }
-  const profile = await get('https://letterboxd.com/itsameaustin/');
-  const favBlock = profile.split('id="favourites"')[1]?.split('</section>')[0] || '';
-  const fav = [...favBlock.matchAll(/data-item-slug="([^"]+)"/g)].map(m => m[1]);
-  return pool.length ? { fav: [...new Set(fav)], pool } : null;
-}
-
 async function save(file, list) {
   if (!list) return;
   const prev = JSON.parse(await readFile(file, 'utf8').catch(() => '{"items":[]}'));
@@ -72,14 +50,22 @@ async function save(file, list) {
   console.log(file, 'updated', list.length);
 }
 
-await save('data/films.json', await films());
+const recentFilms = await films();
+await save('data/films.json', recentFilms);
+
+// Letterboxd blocks rating pages from servers, so the 4.5–5 star pool in data/loved.json
+// was seeded once by hand; new 4.5+ ratings from the RSS feed get added here as the newest.
+{
+  const loved = JSON.parse(await readFile('data/loved.json', 'utf8'));
+  const have = new Set(loved.pool.map(x => x.s));
+  const fresh = recentFilms
+    .filter(x => x.rating >= 4.5)
+    .map(x => ({ t: x.title, y: x.year, r: x.rating, s: (x.url.match(/\/film\/([^/]+)\//) || [])[1], f: 0 }))
+    .filter(x => x.s && !have.has(x.s));
+  if (fresh.length) {
+    loved.pool = [...fresh, ...loved.pool];
+    await writeFile('data/loved.json', JSON.stringify(loved) + '\n');
+    console.log('data/loved.json added', fresh.map(x => x.t).join(', '));
+  } else console.log('data/loved.json unchanged');
+}
 await save('data/books.json', await books());
-try {
-  const l = await loved();
-  if (l) {
-    const prev = await readFile('data/loved.json', 'utf8').catch(() => '');
-    const next = JSON.stringify(l) + '\n';
-    if (prev !== next) { await writeFile('data/loved.json', next); console.log('data/loved.json updated', l.pool.length, 'films,', l.fav.length, 'favourites'); }
-    else console.log('data/loved.json unchanged');
-  }
-} catch (e) { console.log('loved skipped:', e.message); }
