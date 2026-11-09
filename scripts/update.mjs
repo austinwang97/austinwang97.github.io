@@ -42,6 +42,28 @@ async function books() {
     }));
 }
 
+// Every film rated 4.5 or 5, newest first, plus the four profile favourites.
+async function loved() {
+  const pool = [];
+  for (const r of ['5', '4.5']) {
+    const list = [];
+    for (let p = 1; p <= 15; p++) {
+      const html = await get(`https://letterboxd.com/itsameaustin/films/rated/${r}/by/date/page/${p}/`);
+      const got = [...html.matchAll(/data-item-name="([^"]+)"[\s\S]*?data-item-slug="([^"]+)"/g)];
+      if (!got.length) break;
+      got.forEach(m => list.push([decode(m[1]).replace(/&#039;/g, "'"), m[2]]));
+    }
+    list.forEach(([name, slug], i) => {
+      const m = name.match(/^(.*) \((\d{4})\)$/);
+      pool.push({ t: m ? m[1] : name, y: m ? m[2] : '', r: Number(r), s: slug, f: +(i / list.length).toFixed(3) });
+    });
+  }
+  const profile = await get('https://letterboxd.com/itsameaustin/');
+  const favBlock = profile.split('id="favourites"')[1]?.split('</section>')[0] || '';
+  const fav = [...favBlock.matchAll(/data-item-slug="([^"]+)"/g)].map(m => m[1]);
+  return pool.length ? { fav: [...new Set(fav)], pool } : null;
+}
+
 async function save(file, list) {
   if (!list) return;
   const prev = JSON.parse(await readFile(file, 'utf8').catch(() => '{"items":[]}'));
@@ -52,3 +74,12 @@ async function save(file, list) {
 
 await save('data/films.json', await films());
 await save('data/books.json', await books());
+try {
+  const l = await loved();
+  if (l) {
+    const prev = await readFile('data/loved.json', 'utf8').catch(() => '');
+    const next = JSON.stringify(l) + '\n';
+    if (prev !== next) { await writeFile('data/loved.json', next); console.log('data/loved.json updated', l.pool.length, 'films,', l.fav.length, 'favourites'); }
+    else console.log('data/loved.json unchanged');
+  }
+} catch (e) { console.log('loved skipped:', e.message); }
