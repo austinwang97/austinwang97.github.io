@@ -58,7 +58,13 @@ async function books() {
     return { title, author: a ? strip(a[1]) : '', rating, read: d ? new Date(d[1]).toISOString().slice(0, 10) : null, url: url.split('?')[0], source: 'widget' };
   }).filter(x => x.title);
   const prev = JSON.parse(await readFile('data/books.json', 'utf8').catch(() => '{"items":[]}')).items;
-  for (const x of out) if (!x.read) x.read = prev.find(p => p.title === x.title && p.read)?.read ?? null;
+  // The widget has no dates; keep known ones, and date a newly seen book by the day it showed up
+  // (the job runs every 6 hours, so that's within hours of logging it).
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  for (const x of out) {
+    const known = prev.find(p => p.title === x.title);
+    x.read = x.read || known?.read || (known ? null : today);
+  }
   console.log('goodreads widget:', out.length, 'books; first:', out[0]?.title, out[0]?.rating);
   return out.length ? out : null;
 }
