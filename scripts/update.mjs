@@ -40,7 +40,6 @@ async function books() {
   const end = js.indexOf("var widget_div", start);
   const raw = js.slice(start + 19, end).replace(/';?\s*$/, '');
   const html = raw.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, c) => c[0] === 'u' && c.length === 5 ? String.fromCharCode(parseInt(c.slice(1), 16)) : ({ n: '\n', t: '\t', r: '' }[c] ?? c));
-  if (process.env.WIDGET_DEBUG) await writeFile('data/widget-debug.txt', html.split(/class="gr_custom_each_container/).slice(1, 5).join('\n=====\n'));
   const blocks = html.split(/class="gr_custom_each_container[^"]*"/).slice(1);
   const out = blocks.map(b => {
     const t = b.match(/class="gr_custom_title[^"]*"[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
@@ -48,9 +47,9 @@ async function books() {
     const r = b.match(/class="gr_custom_rating[^"]*"([\s\S]*?)<\/div>/);
     let rating = null;
     if (r) {
-      const word = Object.keys(RATING_WORDS).find(w => r[1].includes(`title="${w}"`) || r[1].includes(`>${w}<`));
-      const full = (r[1].match(/p10/g) || []).length, half = (r[1].match(/p5\b/g) || []).length;
-      rating = full ? full + half * 0.5 : (word ? RATING_WORDS[word] : null);
+      const stars = [...r[1].matchAll(/gr_flat_red_star_(active|inactive|(\d+)pct)/g)];
+      if (stars.length) rating = stars.reduce((sum, m) => sum + (m[1] === "active" ? 1 : m[2] ? Number(m[2]) / 100 : 0), 0) || null;
+      else { const word = Object.keys(RATING_WORDS).find(w => r[1].includes(`title="${w}"`)); rating = word ? RATING_WORDS[word] : null; }
     }
     const d = b.match(/(?:read|date read)[^<]*?((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4})/i);
     const title = t ? strip(t[2]).replace(/:.*$/, '').replace(/\s*\(.*\)$/, '') : '';
@@ -58,6 +57,8 @@ async function books() {
     if (url.startsWith('/')) url = 'https://www.goodreads.com' + url;
     return { title, author: a ? strip(a[1]) : '', rating, read: d ? new Date(d[1]).toISOString().slice(0, 10) : null, url: url.split('?')[0], source: 'widget' };
   }).filter(x => x.title);
+  const prev = JSON.parse(await readFile('data/books.json', 'utf8').catch(() => '{"items":[]}')).items;
+  for (const x of out) if (!x.read) x.read = prev.find(p => p.title === x.title && p.read)?.read ?? null;
   console.log('goodreads widget:', out.length, 'books; first:', out[0]?.title, out[0]?.rating);
   return out.length ? out : null;
 }
