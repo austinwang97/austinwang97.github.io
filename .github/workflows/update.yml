@@ -3,6 +3,9 @@ on:
   schedule:
     - cron: '17 */6 * * *'
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['scripts/**', '.github/workflows/update.yml']
 permissions:
   contents: write
 jobs:
@@ -14,8 +17,6 @@ jobs:
         with:
           node-version: 24
       - run: node scripts/update.mjs
-        env:
-          GOODREADS_RSS: ${{ secrets.GOODREADS_RSS }}
       - run: |
           git config user.name "austinwang.net bot"
           git config user.email "actions@users.noreply.github.com"

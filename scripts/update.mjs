@@ -4,7 +4,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 const LETTERBOXD = 'https://letterboxd.com/itsameaustin/rss/';
 const LASTFM_USER = 'austinwang97';
-const GOODREADS = process.env.GOODREADS_RSS || ''; // e.g. https://www.goodreads.com/review/list_rss/26112762?key=...&shelf=read
 
 const tag = (xml, name) => {
   const m = xml.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`));
@@ -28,18 +27,38 @@ async function films() {
     }));
 }
 
+// Goodreads killed its feeds and hides shelf pages from signed-out visitors, but the
+// "custom widget" meant for embedding a shelf on personal sites is still public.
+const GR_WIDGET = 'https://www.goodreads.com/review/custom_widget/26112762.Recently%20read?cover_position=none&cover_size=small&num_books=10&order=d&shelf=read&show_author=1&show_cover=0&show_rating=1&show_review=0&show_tags=0&show_title=1&sort=date_read&widget_bg_color=FFFFFF&widget_bg_transparent=true&widget_border_width=none&widget_id=austinwangnet&widget_text_color=000000&widget_title_size=medium&widget_width=medium';
+const RATING_WORDS = { 'did not like it': 1, 'it was ok': 2, 'liked it': 3, 'really liked it': 4, 'it was amazing': 5 };
+const strip = h => decode(h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+
 async function books() {
-  if (!GOODREADS) return null;
-  const xml = await get(GOODREADS);
-  return items(xml)
-    .slice(0, 10)
-    .map(i => ({
-      title: decode(tag(i, 'title')),
-      author: decode(tag(i, 'author_name')),
-      rating: Number(tag(i, 'user_rating')) || null,
-      read: tag(i, 'user_read_at'),
-      url: tag(i, 'link'),
-    }));
+  const js = await get(GR_WIDGET);
+  const start = js.indexOf("var widget_code = '");
+  if (start < 0) { console.log('goodreads widget: no widget_code (private shelf or format change)'); return null; }
+  const end = js.indexOf("var widget_div", start);
+  const raw = js.slice(start + 19, end).replace(/';?\s*$/, '');
+  const html = raw.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, c) => c[0] === 'u' && c.length === 5 ? String.fromCharCode(parseInt(c.slice(1), 16)) : ({ n: '\n', t: '\t', r: '' }[c] ?? c));
+  const blocks = html.split(/class="gr_custom_each_container[^"]*"/).slice(1);
+  const out = blocks.map(b => {
+    const t = b.match(/class="gr_custom_title[^"]*"[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+    const a = b.match(/class="gr_custom_author[^"]*"[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/);
+    const r = b.match(/class="gr_custom_rating[^"]*"([\s\S]*?)<\/div>/);
+    let rating = null;
+    if (r) {
+      const word = Object.keys(RATING_WORDS).find(w => r[1].includes(`title="${w}"`) || r[1].includes(`>${w}<`));
+      const full = (r[1].match(/p10/g) || []).length, half = (r[1].match(/p5\b/g) || []).length;
+      rating = full ? full + half * 0.5 : (word ? RATING_WORDS[word] : null);
+    }
+    const d = b.match(/(?:read|date read)[^<]*?((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? \d{4})/i);
+    const title = t ? strip(t[2]).replace(/:.*$/, '').replace(/\s*\(.*\)$/, '') : '';
+    let url = t ? t[1] : '';
+    if (url.startsWith('/')) url = 'https://www.goodreads.com' + url;
+    return { title, author: a ? strip(a[1]) : '', rating, read: d ? new Date(d[1]).toISOString().slice(0, 10) : null, url: url.split('?')[0], source: 'widget' };
+  }).filter(x => x.title);
+  console.log('goodreads widget:', out.length, 'books; first:', out[0]?.title, out[0]?.rating);
+  return out.length ? out : null;
 }
 
 async function save(file, list) {
