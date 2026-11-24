@@ -17,6 +17,8 @@ jobs:
         with:
           node-version: 24
       - run: node scripts/update.mjs
+        env:
+          WIDGET_DEBUG: '1'
       - run: |
           git config user.name "austinwang.net bot"
           git config user.email "actions@users.noreply.github.com"

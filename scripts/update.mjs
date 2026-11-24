@@ -40,6 +40,7 @@ async function books() {
   const end = js.indexOf("var widget_div", start);
   const raw = js.slice(start + 19, end).replace(/';?\s*$/, '');
   const html = raw.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, c) => c[0] === 'u' && c.length === 5 ? String.fromCharCode(parseInt(c.slice(1), 16)) : ({ n: '\n', t: '\t', r: '' }[c] ?? c));
+  if (process.env.WIDGET_DEBUG) await writeFile('data/widget-debug.txt', html.split(/class="gr_custom_each_container/).slice(1, 5).join('\n=====\n'));
   const blocks = html.split(/class="gr_custom_each_container[^"]*"/).slice(1);
   const out = blocks.map(b => {
     const t = b.match(/class="gr_custom_title[^"]*"[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
